@@ -1,0 +1,1028 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Seam Diagnostics — where a multi-domain machine is weakest</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#0B0E14; --panel:#11161F; --panel2:#161D28; --line:#222B38;
+    --teal:#35D0BE; --amber:#F2A93B; --red:#E5484D;
+    --text:#E6EAF0; --dim:#8A93A3; --faint:#5C6573;
+    --mono:'IBM Plex Mono',ui-monospace,monospace;
+    --disp:'Space Grotesk',system-ui,sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{background:var(--ink); color:var(--text); font-family:var(--disp); line-height:1.5;
+    -webkit-font-smoothing:antialiased;
+    background-image:radial-gradient(1200px 600px at 70% -10%, rgba(53,208,190,.06), transparent 60%);}
+  .wrap{max-width:1000px; margin:0 auto; padding:34px 20px 80px}
+  a{color:var(--teal); text-decoration:none}
+  a:hover{text-decoration:underline}
+  a:focus-visible{outline:2px solid var(--teal); outline-offset:3px; border-radius:3px}
+
+  .eyebrow{font-family:var(--mono); font-size:11.5px; letter-spacing:.28em; text-transform:uppercase;
+    color:var(--faint); display:flex; align-items:center; gap:10px; flex-wrap:wrap}
+  .eyebrow .num{color:var(--teal)}
+  .eyebrow .dot{width:5px;height:5px;border-radius:50%;background:var(--line)}
+  h1{font-size:clamp(29px,6.2vw,50px); line-height:1.03; font-weight:700; letter-spacing:-.02em; margin:18px 0 0}
+  h1 .hot{color:var(--red)}
+  .lede{max-width:62ch; color:var(--dim); font-size:clamp(15px,2.2vw,17px); margin:16px 0 0}
+  .sibling{margin-top:18px; font-family:var(--mono); font-size:12.5px; color:var(--dim);
+    border-left:2px solid var(--line); padding:6px 0 6px 14px}
+  .sibling b{color:var(--text); font-weight:500}
+
+  .toggle{display:inline-flex; background:var(--panel2); border:1px solid var(--line); border-radius:11px;
+    padding:3px; gap:3px; margin-top:24px}
+  .toggle button{font-family:var(--mono); font-size:12px; letter-spacing:.04em; color:var(--dim);
+    background:transparent; border:0; padding:9px 18px; border-radius:8px; cursor:pointer; transition:background .15s,color .15s}
+  .toggle button[aria-pressed=true]{background:var(--teal); color:#08110f; font-weight:600}
+  .toggle button:focus-visible{outline:2px solid var(--teal); outline-offset:2px}
+  .mctx{font-family:var(--mono); font-size:11.5px; color:var(--faint); margin-top:12px}
+  .mctx b{color:var(--dim); font-weight:500}
+
+  .rule{height:1px;background:var(--line);margin:34px 0}
+  .sec-k{font-family:var(--mono); font-size:11px; letter-spacing:.22em; text-transform:uppercase; color:var(--faint)}
+  h2{font-size:clamp(20px,3.4vw,26px); font-weight:600; letter-spacing:-.01em; margin:8px 0 0}
+  .sub{color:var(--dim); max-width:64ch; margin:10px 0 0; font-size:15px}
+
+  .stage{margin-top:24px; display:grid; grid-template-columns:minmax(0,1fr) 280px; gap:22px; align-items:start}
+  @media(max-width:760px){ .stage{grid-template-columns:1fr} }
+  .matrix-card{background:var(--panel); border:1px solid var(--line); border-radius:14px; padding:18px}
+  .mtitle{font-family:var(--mono); font-size:11px; letter-spacing:.16em; text-transform:uppercase; color:var(--faint); margin-bottom:14px}
+  table.m{border-collapse:separate; border-spacing:5px; width:100%}
+  table.m td{text-align:center; vertical-align:middle}
+  td.rowlab,td.collab{font-family:var(--mono); font-size:11px; color:var(--dim); padding:0 4px; white-space:nowrap}
+  td.collab{font-size:10.5px; height:24px}
+  .cell{position:relative; aspect-ratio:1/1; min-width:34px; border-radius:7px; display:flex; align-items:center; justify-content:center;
+    font-family:var(--mono); font-size:12px; font-weight:500; color:#0B0E14; border:1px solid rgba(255,255,255,.04)}
+  .cell.zero{color:var(--faint); background:var(--panel2)!important}
+  .cell.self{background:transparent!important; border:1px dashed #2c3a33; color:var(--teal)}
+  .cell .lo{color:#E6EAF0}
+  .legend{display:flex; align-items:center; gap:8px; margin-top:14px; font-family:var(--mono); font-size:10.5px; color:var(--faint)}
+  .ramp{height:8px; flex:1; border-radius:5px; background:linear-gradient(90deg,#141A24,#F2A93B 55%,#E5484D)}
+
+  .read{background:var(--panel); border:1px solid var(--line); border-radius:14px; padding:18px; display:flex; flex-direction:column; gap:16px}
+  .read .item .lab{font-family:var(--mono); font-size:10.5px; letter-spacing:.16em; text-transform:uppercase; color:var(--faint)}
+  .read .item .val{font-family:var(--disp); font-size:18px; font-weight:600; margin-top:4px; line-height:1.25}
+  .chain{display:flex; align-items:center; gap:6px; flex-wrap:wrap; margin-top:6px; font-family:var(--mono); font-size:12px}
+  .chip{padding:3px 9px; border-radius:999px; border:1px solid rgba(229,72,77,.5); background:rgba(229,72,77,.12); color:#ffb4b6}
+  .arr{color:var(--faint)}
+  .val .unit{color:var(--dim); font-family:var(--mono); font-size:12px; font-weight:400}
+  .small{font-size:13px;color:var(--dim);font-family:var(--mono);margin-top:6px;line-height:1.45}
+
+  .panelbox{background:var(--panel); border:1px solid var(--line); border-radius:14px; padding:20px; margin-top:22px}
+  .chartwrap{display:grid; grid-template-columns:minmax(0,1fr) 250px; gap:24px; align-items:center}
+  @media(max-width:760px){ .chartwrap{grid-template-columns:1fr} }
+  svg{display:block; width:100%; height:auto; overflow:visible}
+  .axlab{fill:var(--faint); font-family:var(--mono); font-size:10px}
+  .gridln{stroke:var(--line); stroke-width:1}
+  .note{font-size:14px; color:var(--dim)} .note b{color:var(--text); font-weight:600}
+  .note .danger{color:#ffb4b6; font-weight:600} .note .safe{color:var(--teal); font-weight:600}
+
+  .ictrl{display:flex; align-items:center; gap:16px; margin:18px 0 4px; flex-wrap:wrap}
+  .ictrl label{font-family:var(--mono); font-size:11px; letter-spacing:.12em; text-transform:uppercase; color:var(--faint)}
+  input[type=range]{ -webkit-appearance:none; appearance:none; height:4px; border-radius:3px; background:var(--line); flex:1; min-width:160px; outline:none}
+  input[type=range]::-webkit-slider-thumb{ -webkit-appearance:none; width:18px; height:18px; border-radius:50%; background:var(--teal); cursor:pointer; border:3px solid #0B0E14; box-shadow:0 0 0 1px var(--teal)}
+  input[type=range]::-moz-range-thumb{ width:16px;height:16px;border-radius:50%;background:var(--teal);cursor:pointer;border:3px solid #0B0E14}
+  input[type=range]:focus-visible::-webkit-slider-thumb{box-shadow:0 0 0 3px rgba(53,208,190,.4)}
+  .budgetval{font-family:var(--mono); font-size:15px; font-weight:600; color:var(--teal); min-width:48px}
+  .factors{display:flex; gap:10px; flex-wrap:wrap; margin-top:16px}
+  .fcard{flex:1; min-width:150px; background:var(--panel2); border:1px solid var(--line); border-radius:11px; padding:13px 15px}
+  .fcard .k{font-family:var(--mono); font-size:10px; letter-spacing:.12em; text-transform:uppercase; color:var(--faint)}
+  .fcard .v{font-family:var(--disp); font-size:26px; font-weight:700; margin-top:3px}
+  .fcard .v.t{color:var(--teal)} .fcard .v.a{color:var(--amber)}
+  .fcard .d{font-size:11.5px; color:var(--dim); margin-top:3px}
+  .lkey{display:flex; gap:16px; flex-wrap:wrap; margin-top:14px; font-family:var(--mono); font-size:11px; color:var(--dim)}
+  .lkey span{display:inline-flex; align-items:center; gap:6px}
+  .sw{width:14px;height:3px;border-radius:2px;display:inline-block}
+
+  .ledger{margin-top:24px; background:var(--panel); border:1px solid var(--line); border-radius:14px; overflow:hidden}
+  .ledger .row{display:grid; grid-template-columns:140px 1fr; gap:14px; padding:13px 18px; border-top:1px solid var(--line); font-size:13.5px}
+  .ledger .row:first-child{border-top:none}
+  .ledger .row .t{font-family:var(--mono); font-size:10.5px; letter-spacing:.14em; text-transform:uppercase; color:var(--faint); padding-top:2px}
+  .ledger .row .c{color:var(--dim)} .ledger .row .c b{color:var(--text); font-weight:500}
+  @media(max-width:560px){ .ledger .row{grid-template-columns:1fr; gap:4px} }
+
+  footer{margin-top:30px; display:flex; justify-content:space-between; gap:14px; flex-wrap:wrap;
+    font-family:var(--mono); font-size:11.5px; color:var(--faint); border-top:1px solid var(--line); padding-top:18px}
+  footer b{color:var(--dim); font-weight:500}
+
+  @media (prefers-reduced-motion: no-preference){
+    .cell{transition:transform .15s ease}
+    .cell:not(.zero):not(.self):hover{transform:scale(1.08)}
+    .fade{animation:fade .6s ease both}
+    @keyframes fade{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="fade">
+    <div class="eyebrow">
+      <span>Stability Diagnostics</span><span class="dot"></span>
+      <span class="num">Instrument 02</span><span class="dot"></span>
+      <span>Coupling Seam</span>
+    </div>
+    <h1>Where a machine is <span class="hot">weakest</span> is not inside a part. It is the seam between parts.</h1>
+    <p class="lede">Most condition monitoring reads one domain at a time: pressure, heat, power, each alone. But many failures form in the handoff between domains, where load in one quietly raises load in the next. From raw multi-domain sensor data, with no prior knowledge of the machine, this instrument locates the weak seam and the dominant failure chain. The same method, unchanged, run on two different real machines below.</p>
+    <div class="sibling">
+      One governance law, <b>&Theta; = I/R</b> (driving load over absorption capacity), two questions.
+      Instrument&nbsp;01 asks <b>when</b> a machine will fail
+      (<a href="https://oren-speiser.github.io/cross-domain-earlywarning/" target="_blank" rel="noopener">cross-domain early warning &nearr;</a>).
+      This one asks <b>where</b> the weak seam is.
+    </div>
+
+    <div class="toggle" role="group" aria-label="Choose machine">
+      <button id="b-hydraulic" aria-pressed="true" onclick="setMachine('hydraulic')">Hydraulic rig</button>
+      <button id="b-engine" aria-pressed="false" onclick="setMachine('engine')">Turbofan engine</button>
+    </div>
+    <div class="mctx" id="mctx"></div>
+  </header>
+
+  <div class="rule"></div>
+
+  <section>
+    <div class="sec-k">Recovered from real data</div>
+    <h2>The seam map</h2>
+    <p class="sub">Each off-diagonal cell is the direct coupling between two physical domains, estimated as the partial correlation across every cycle, after the effect of all other domains is removed.</p>
+    <div class="stage">
+      <div class="matrix-card fade">
+        <div class="mtitle">Cross-domain coupling &middot; |partial correlation|</div>
+        <table class="m" id="matrix" aria-label="Coupling matrix between physical domains"></table>
+        <div class="legend"><span>weak</span><div class="ramp"></div><span>strong seam</span></div>
+      </div>
+      <aside class="read fade">
+        <div class="item">
+          <div class="lab">Weakest seam sits in</div>
+          <div class="chain" id="weakseam"></div>
+          <div class="small" id="weakdesc"></div>
+        </div>
+        <div class="item">
+          <div class="lab">Dominant failure chain</div>
+          <div class="val" id="chain"></div>
+        </div>
+        <div class="item">
+          <div class="lab">Coupling spectral load &rho;</div>
+          <div class="val" id="rho0"></div>
+        </div>
+      </aside>
+    </div>
+  </section>
+
+  <div class="rule"></div>
+
+  <section>
+    <div class="sec-k">The reading</div>
+    <h2>Strength and danger are not the same axis</h2>
+    <p class="sub">A coupling matters when the system's least-stable mode runs through it, not simply when it is large. Sensitivity is the dominant-eigenvector weight on each edge: the standard measure of how much it drives instability.</p>
+    <div class="panelbox fade">
+      <div class="chartwrap">
+        <svg id="scatter" viewBox="0 0 460 300" role="img" aria-label="Coupling strength versus instability sensitivity for each domain pair"></svg>
+        <div class="note" id="scatternote"></div>
+      </div>
+    </div>
+  </section>
+
+  <div class="rule"></div>
+
+  <section>
+    <div class="sec-k">From diagnosis to action</div>
+    <h2>Does a targeted repair beat spreading the same effort?</h2>
+    <p class="sub">Same repair budget, four ways to spend it. Margin gain is how much the coupling load &rho; is reduced. Targeting is guided by the dominant-eigenvector sensitivity; the alternatives spread the budget or chase the largest coupling. This is where the two machines differ, honestly.</p>
+    <div class="panelbox fade">
+      <div class="ictrl">
+        <label for="budget">Repair budget</label>
+        <input id="budget" type="range" min="0" max="30" value="20" step="2" aria-label="Repair budget">
+        <span class="budgetval" id="budgetval">20%</span>
+      </div>
+      <svg id="lines" viewBox="0 0 720 300" role="img" aria-label="Margin gain versus repair budget for four intervention strategies"></svg>
+      <div class="lkey">
+        <span><i class="sw" style="background:var(--teal)"></i>Targeted (eigenvector-guided)</span>
+        <span><i class="sw" style="background:#7fb9b0"></i>Uniform, proportional (strict)</span>
+        <span><i class="sw" style="background:var(--amber)"></i>Uniform, even split (naive)</span>
+        <span><i class="sw" style="background:var(--faint)"></i>Cut the largest coupling</span>
+      </div>
+      <div class="factors">
+        <div class="fcard"><div class="k">Targeted margin gain</div><div class="v t" id="f-gain">0.00</div><div class="d">reduction in coupling load &rho;</div></div>
+        <div class="fcard"><div class="k">vs naive uniform</div><div class="v a" id="f-naive">0&times;</div><div class="d">even-split baseline</div></div>
+        <div class="fcard"><div class="k">vs strict uniform</div><div class="v t" id="f-smart">0&times;</div><div class="d">toughest baseline</div></div>
+      </div>
+      <p class="note" id="intervnote" style="margin-top:16px"></p>
+    </div>
+  </section>
+
+  <div class="rule"></div>
+
+  <section>
+    <div class="sec-k">What this is, exactly</div>
+    <h2>Scope, plainly stated</h2>
+    <div class="ledger fade">
+      <div class="row"><div class="t">Data</div><div class="c"><b>Real, public benchmarks.</b> Hydraulic rig: UCI Condition Monitoring of Hydraulic Systems (Helwig et&nbsp;al., 2015), a physical test rig, 2,205 cycles, 17 sensors. Turbofan: NASA C-MAPSS FD001 (Saxena&nbsp;&amp;&nbsp;Goebel, 2008), 100 engines run to failure.</div></div>
+      <div class="row"><div class="t">Method</div><div class="c">Each sensor reduced to one value per cycle and standardized; sensors grouped into physical domains; coupling estimated as <b>partial correlation</b> across the cycles, isolating direct domain-to-domain dependence. Identical method on both machines, nothing re-tuned.</div></div>
+      <div class="row"><div class="t">Math</div><div class="c"><b>Established, not new.</b> Dominant-eigenvalue stability, eigenvector-guided edge selection (Restrepo&ndash;Ott&ndash;Hunt; Van&nbsp;Mieghem et&nbsp;al.), Perron&ndash;Frobenius. The contribution is the cross-domain framing and its application to real multi-domain data.</div></div>
+      <div class="row"><div class="t">Honest limit</div><div class="c">The diagnostic <b>reading</b> transfers across both machines. The targeted-repair <b>advantage</b> does not: it is real where coupling is uneven (the hydraulic rig) and vanishes where the danger is a near-uniform cluster (the engine). Partial correlation is observed dependence, not proven causation.</div></div>
+    </div>
+  </section>
+
+  <footer>
+    <div><b>Oren A. L. Speiser</b> &middot; Systems Architect &middot; Tel Aviv</div>
+    <div><b>ORCID</b> 0009-0001-1205-4079 &middot; reproducible from public data</div>
+  </footer>
+
+</div>
+
+<script>
+const DATA = { hydraulic: {
+ "domains": [
+  "Mechanical",
+  "Energy",
+  "Flow",
+  "Thermal",
+  "Vibration"
+ ],
+ "matrix": [
+  [
+   0.0,
+   0.335,
+   0.014,
+   0.105,
+   0.33
+  ],
+  [
+   0.335,
+   0.0,
+   0.925,
+   0.886,
+   0.101
+  ],
+  [
+   0.014,
+   0.925,
+   0.0,
+   0.955,
+   0.147
+  ],
+  [
+   0.105,
+   0.886,
+   0.955,
+   0.0,
+   0.062
+  ],
+  [
+   0.33,
+   0.101,
+   0.147,
+   0.062,
+   0.0
+  ]
+ ],
+ "pcorr": [
+  [
+   0.0,
+   0.34,
+   0.01,
+   -0.1,
+   -0.33
+  ],
+  [
+   0.34,
+   0.0,
+   -0.93,
+   -0.89,
+   0.1
+  ],
+  [
+   0.01,
+   -0.93,
+   0.0,
+   -0.96,
+   -0.15
+  ],
+  [
+   -0.1,
+   -0.89,
+   -0.96,
+   0.0,
+   0.06
+  ],
+  [
+   -0.33,
+   0.1,
+   -0.15,
+   0.06,
+   0.0
+  ]
+ ],
+ "eigvec": [
+  0.156,
+  0.57,
+  0.568,
+  0.561,
+  0.119
+ ],
+ "load": [
+  0.784,
+  2.248,
+  2.041,
+  2.008,
+  0.64
+ ],
+ "rho0": 1.908,
+ "edges": [
+  {
+   "a": "Mechanical",
+   "b": "Energy",
+   "ai": 0,
+   "bi": 1,
+   "w": 0.335,
+   "s": 0.089
+  },
+  {
+   "a": "Mechanical",
+   "b": "Flow",
+   "ai": 0,
+   "bi": 2,
+   "w": 0.014,
+   "s": 0.088
+  },
+  {
+   "a": "Mechanical",
+   "b": "Thermal",
+   "ai": 0,
+   "bi": 3,
+   "w": 0.105,
+   "s": 0.087
+  },
+  {
+   "a": "Mechanical",
+   "b": "Vibration",
+   "ai": 0,
+   "bi": 4,
+   "w": 0.33,
+   "s": 0.019
+  },
+  {
+   "a": "Energy",
+   "b": "Flow",
+   "ai": 1,
+   "bi": 2,
+   "w": 0.925,
+   "s": 0.323
+  },
+  {
+   "a": "Energy",
+   "b": "Thermal",
+   "ai": 1,
+   "bi": 3,
+   "w": 0.886,
+   "s": 0.32
+  },
+  {
+   "a": "Energy",
+   "b": "Vibration",
+   "ai": 1,
+   "bi": 4,
+   "w": 0.101,
+   "s": 0.068
+  },
+  {
+   "a": "Flow",
+   "b": "Thermal",
+   "ai": 2,
+   "bi": 3,
+   "w": 0.955,
+   "s": 0.319
+  },
+  {
+   "a": "Flow",
+   "b": "Vibration",
+   "ai": 2,
+   "bi": 4,
+   "w": 0.147,
+   "s": 0.068
+  },
+  {
+   "a": "Thermal",
+   "b": "Vibration",
+   "ai": 3,
+   "bi": 4,
+   "w": 0.062,
+   "s": 0.067
+  }
+ ],
+ "sweep": {
+  "budget": [
+   0.0,
+   0.02,
+   0.04,
+   0.06,
+   0.08,
+   0.1,
+   0.12,
+   0.14,
+   0.16,
+   0.18,
+   0.2,
+   0.22,
+   0.24,
+   0.26,
+   0.28,
+   0.3,
+   0.32,
+   0.34,
+   0.36,
+   0.38,
+   0.4,
+   0.42,
+   0.44,
+   0.46,
+   0.48,
+   0.5,
+   0.52,
+   0.54,
+   0.56,
+   0.58,
+   0.6
+  ],
+  "targeted": [
+   0.0,
+   0.0494,
+   0.0978,
+   0.1452,
+   0.1915,
+   0.2367,
+   0.2809,
+   0.3239,
+   0.3657,
+   0.4065,
+   0.4461,
+   0.4845,
+   0.522,
+   0.5719,
+   0.6196,
+   0.6647,
+   0.7071,
+   0.7465,
+   0.7826,
+   0.815,
+   0.8436,
+   0.8677,
+   0.887,
+   0.901,
+   0.9434,
+   1.0124,
+   1.0785,
+   1.1402,
+   1.1953,
+   1.2414,
+   1.2769
+  ],
+  "naive": [
+   0.0,
+   0.0222,
+   0.0438,
+   0.0641,
+   0.0841,
+   0.104,
+   0.1235,
+   0.1427,
+   0.1617,
+   0.1799,
+   0.198,
+   0.2159,
+   0.2335,
+   0.251,
+   0.2678,
+   0.2841,
+   0.3004,
+   0.3166,
+   0.3327,
+   0.3488,
+   0.3648,
+   0.3807,
+   0.3967,
+   0.4126,
+   0.4285,
+   0.4444,
+   0.4603,
+   0.4762,
+   0.492,
+   0.5078,
+   0.5236
+  ],
+  "smart": [
+   0.0,
+   0.0382,
+   0.0763,
+   0.1145,
+   0.1526,
+   0.1908,
+   0.229,
+   0.2671,
+   0.3053,
+   0.3434,
+   0.3816,
+   0.4197,
+   0.4579,
+   0.4961,
+   0.5342,
+   0.5724,
+   0.6105,
+   0.6487,
+   0.6869,
+   0.725,
+   0.7632,
+   0.8013,
+   0.8395,
+   0.8776,
+   0.9158,
+   0.954,
+   0.9921,
+   1.0303,
+   1.0684,
+   1.1066,
+   1.1448
+  ],
+  "cutbig": [
+   0.0,
+   0.0486,
+   0.0961,
+   0.1425,
+   0.1877,
+   0.2316,
+   0.2744,
+   0.3158,
+   0.3561,
+   0.395,
+   0.4327,
+   0.469,
+   0.5041,
+   0.5479,
+   0.5952,
+   0.6398,
+   0.6813,
+   0.7194,
+   0.754,
+   0.7848,
+   0.8115,
+   0.8338,
+   0.8516,
+   0.8646,
+   0.8727,
+   0.915,
+   0.9761,
+   1.0343,
+   1.0891,
+   1.1399,
+   1.1861
+  ]
+ },
+ "cycles": 2205,
+ "n_sensors": 17,
+ "n_domains": 5
+}, engine: {
+ "domains": [
+  "Thermal",
+  "Pressure",
+  "Speed",
+  "Flow"
+ ],
+ "matrix": [
+  [
+   0.0,
+   0.012,
+   0.592,
+   0.561
+  ],
+  [
+   0.012,
+   0.0,
+   0.063,
+   0.001
+  ],
+  [
+   0.592,
+   0.063,
+   0.0,
+   0.136
+  ],
+  [
+   0.561,
+   0.001,
+   0.136,
+   0.0
+  ]
+ ],
+ "pcorr": [
+  [
+   0.0,
+   -0.01,
+   0.59,
+   -0.56
+  ],
+  [
+   -0.01,
+   0.0,
+   0.06,
+   -0.0
+  ],
+  [
+   0.59,
+   0.06,
+   0.0,
+   -0.14
+  ],
+  [
+   -0.56,
+   -0.0,
+   -0.14,
+   0.0
+  ]
+ ],
+ "eigvec": [
+  0.676,
+  0.047,
+  0.532,
+  0.508
+ ],
+ "load": [
+  1.165,
+  0.076,
+  0.791,
+  0.698
+ ],
+ "rho0": 0.888,
+ "edges": [
+  {
+   "a": "Thermal",
+   "b": "Pressure",
+   "ai": 0,
+   "bi": 1,
+   "w": 0.012,
+   "s": 0.032
+  },
+  {
+   "a": "Thermal",
+   "b": "Speed",
+   "ai": 0,
+   "bi": 2,
+   "w": 0.592,
+   "s": 0.359
+  },
+  {
+   "a": "Thermal",
+   "b": "Flow",
+   "ai": 0,
+   "bi": 3,
+   "w": 0.561,
+   "s": 0.344
+  },
+  {
+   "a": "Pressure",
+   "b": "Speed",
+   "ai": 1,
+   "bi": 2,
+   "w": 0.063,
+   "s": 0.025
+  },
+  {
+   "a": "Pressure",
+   "b": "Flow",
+   "ai": 1,
+   "bi": 3,
+   "w": 0.001,
+   "s": 0.024
+  },
+  {
+   "a": "Speed",
+   "b": "Flow",
+   "ai": 2,
+   "bi": 3,
+   "w": 0.136,
+   "s": 0.27
+  }
+ ],
+ "sweep": {
+  "budget": [
+   0.0,
+   0.02,
+   0.04,
+   0.06,
+   0.08,
+   0.1,
+   0.12,
+   0.14,
+   0.16,
+   0.18,
+   0.2,
+   0.22,
+   0.24,
+   0.26,
+   0.28,
+   0.3,
+   0.32,
+   0.34,
+   0.36,
+   0.38,
+   0.4,
+   0.42,
+   0.44,
+   0.46,
+   0.48,
+   0.5,
+   0.52,
+   0.54,
+   0.56,
+   0.58,
+   0.6
+  ],
+  "targeted": [
+   0.0,
+   0.0195,
+   0.0386,
+   0.0573,
+   0.0757,
+   0.0937,
+   0.1113,
+   0.1285,
+   0.1451,
+   0.1613,
+   0.177,
+   0.1922,
+   0.2067,
+   0.2207,
+   0.2341,
+   0.2467,
+   0.2587,
+   0.2698,
+   0.2802,
+   0.2897,
+   0.2983,
+   0.3059,
+   0.3189,
+   0.3453,
+   0.3716,
+   0.3978,
+   0.4238,
+   0.4497,
+   0.4754,
+   0.5008,
+   0.526
+  ],
+  "naive": [
+   -0.0,
+   0.0094,
+   0.0187,
+   0.0278,
+   0.0368,
+   0.0458,
+   0.0548,
+   0.0637,
+   0.0726,
+   0.0815,
+   0.0904,
+   0.0993,
+   0.1082,
+   0.117,
+   0.1258,
+   0.1346,
+   0.1434,
+   0.1522,
+   0.161,
+   0.1698,
+   0.1786,
+   0.1874,
+   0.1961,
+   0.2049,
+   0.2136,
+   0.2224,
+   0.2311,
+   0.2399,
+   0.2486,
+   0.2573,
+   0.2658
+  ],
+  "smart": [
+   -0.0,
+   0.0178,
+   0.0355,
+   0.0533,
+   0.0711,
+   0.0888,
+   0.1066,
+   0.1244,
+   0.1422,
+   0.1599,
+   0.1777,
+   0.1955,
+   0.2132,
+   0.231,
+   0.2488,
+   0.2665,
+   0.2843,
+   0.3021,
+   0.3199,
+   0.3376,
+   0.3554,
+   0.3732,
+   0.3909,
+   0.4087,
+   0.4265,
+   0.4442,
+   0.462,
+   0.4798,
+   0.4976,
+   0.5153,
+   0.5331
+  ],
+  "cutbig": [
+   0.0,
+   0.0195,
+   0.0386,
+   0.0573,
+   0.0757,
+   0.0937,
+   0.1113,
+   0.1285,
+   0.1451,
+   0.1613,
+   0.177,
+   0.1922,
+   0.2067,
+   0.2207,
+   0.2341,
+   0.2467,
+   0.2587,
+   0.2698,
+   0.2802,
+   0.2897,
+   0.2983,
+   0.3059,
+   0.3189,
+   0.3453,
+   0.3716,
+   0.3978,
+   0.4238,
+   0.4497,
+   0.4754,
+   0.5008,
+   0.526
+  ]
+ },
+ "cycles": 20631,
+ "units": 100,
+ "n_domains": 4
+} };
+const META = {
+  hydraulic:{
+    ctx:'<b>Hydraulic rig</b> &middot; UCI Condition Monitoring &middot; 2,205 cycles &middot; 17 sensors &rarr; 5 domains',
+    weakDesc:'power, flow and heat are bound together (0.89&ndash;0.96). Mechanical and vibration sit almost apart.',
+    interv:'<b>Read honestly:</b> against a naive even-split the advantage is large (~2.3&times;), and against the strictest, smartest uniform baseline it is smaller but still real (~1.1&ndash;1.2&times;). On this rig coupling is uneven, so targeting has something to exploit.'
+  },
+  engine:{
+    ctx:'<b>Turbofan engine</b> &middot; NASA C-MAPSS FD001 &middot; 100 engines &middot; 20,631 cycles &rarr; 4 domains',
+    weakDesc:'temperature, rotational speed and flow move together as the engine degrades. Pressure sits almost apart.',
+    interv:'<b>Read honestly:</b> here targeting beats only the naive even-split (~2&times;) and merely ties the strict baseline (~1.0&times;, dipping below at high budget). The danger is a near-uniform thermal&ndash;speed&ndash;flow cluster, so there is no single edge to target. The seam reading still holds; the targeting bonus does not apply.'
+  }
+};
+
+let current='hydraulic';
+let LC=null;
+
+function lerp(a,b,t){return a+(b-a)*t}
+function hx(c){return Math.round(c).toString(16).padStart(2,'0')}
+function ramp(s){
+  const stops=[[0,[20,26,36]],[0.45,[242,169,59]],[1,[229,72,77]]];
+  let v=Math.max(0,Math.min(1,s/0.96));
+  for(let i=0;i<stops.length-1;i++){const[p0,c0]=stops[i],[p1,c1]=stops[i+1];
+    if(v<=p1){const t=(v-p0)/(p1-p0);return '#'+hx(lerp(c0[0],c1[0],t))+hx(lerp(c0[1],c1[1],t))+hx(lerp(c0[2],c1[2],t));}}
+  return '#E5484D';
+}
+
+function renderMatrix(d){
+  const t=document.getElementById('matrix'); const dn=d.domains.map(x=>x.slice(0,4)); const n=d.domains.length;
+  let h='<tr><td></td>'; dn.forEach(x=>h+=`<td class="collab">${x}</td>`); h+='</tr>';
+  d.matrix.forEach((row,i)=>{ h+=`<tr><td class="rowlab">${dn[i]}</td>`;
+    row.forEach((v,j)=>{ if(i===j){h+=`<td><div class="cell self" title="${d.domains[i]} — self">self</div></td>`;}
+      else{const cls=v<0.05?'cell zero':'cell'; const tc=(v>0.05&&v<0.5)?'lo':'';
+        h+=`<td><div class="${cls}" style="background:${ramp(v)}" title="${d.domains[i]} ↔ ${d.domains[j]}: ${v}"><span class="${tc}">${v.toFixed(2)}</span></div></td>`;}});
+    h+='</tr>';});
+  t.innerHTML=h;
+}
+
+function topSeam(d){ // domains by dominant-mode concentration
+  const z=d.domains.map((nm,i)=>({nm,v:d.eigvec[i]})).sort((a,b)=>b.v-a.v);
+  const cut=z[0].v*0.55; return z.filter(o=>o.v>=cut).map(o=>o.nm);
+}
+function chainStr(d){ // path through the two highest-sensitivity edges
+  const es=[...d.edges].sort((a,b)=>b.s-a.s); const e1=es[0],e2=es[1];
+  const shared=[e1.a,e1.b].find(x=>x===e2.a||x===e2.b);
+  if(shared){const o1=e1.a===shared?e1.b:e1.a, o2=e2.a===shared?e2.b:e2.a; return `${o1} → ${shared} → ${o2}`;}
+  return `${e1.a} → ${e1.b}`;
+}
+
+function renderReadout(d,m){
+  const seam=topSeam(d);
+  document.getElementById('weakseam').innerHTML=seam.map((s,i)=>`<span class="chip">${s}</span>`+(i<seam.length-1?'<span class="arr">&harr;</span>':'')).join('');
+  document.getElementById('weakdesc').innerHTML=m.weakDesc;
+  document.getElementById('chain').textContent=chainStr(d);
+  document.getElementById('rho0').innerHTML=d.rho0.toFixed(2)+' <span class="unit">higher = closer to a cascade</span>';
+}
+
+function renderScatter(d){
+  const svg=document.getElementById('scatter'); const W=460,H=300,L=52,R=18,T=14,B=46;
+  const maxW=Math.max(...d.edges.map(e=>e.w))*1.12, maxS=Math.max(...d.edges.map(e=>e.s))*1.12;
+  const x=w=>L+(w/maxW)*(W-L-R), y=s=>H-B-(s/maxS)*(H-T-B);
+  let g='';
+  for(let i=0;i<=5;i++){const gx=L+i*(W-L-R)/5; g+=`<line class="gridln" x1="${gx}" y1="${T}" x2="${gx}" y2="${H-B}"/>`;
+    g+=`<text class="axlab" x="${gx}" y="${H-B+16}" text-anchor="middle">${(maxW*i/5).toFixed(1)}</text>`;}
+  for(let i=0;i<=4;i++){const gy=T+i*(H-T-B)/4; g+=`<line class="gridln" x1="${L}" y1="${gy}" x2="${W-R}" y2="${gy}"/>`;
+    g+=`<text class="axlab" x="${L-8}" y="${gy+3}" text-anchor="end">${(maxS*(1-i/4)).toFixed(2)}</text>`;}
+  g+=`<text class="axlab" x="${(L+W-R)/2}" y="${H-6}" text-anchor="middle">coupling strength &rarr;</text>`;
+  g+=`<text class="axlab" transform="translate(13 ${(T+H-B)/2}) rotate(-90)" text-anchor="middle">instability sensitivity &rarr;</text>`;
+  const sMax=Math.max(...d.edges.map(e=>e.s)), wMax=Math.max(...d.edges.map(e=>e.w));
+  const trapCands=d.edges.filter(e=>e.s<0.20*sMax && e.w>=0.25*wMax).sort((a,b)=>b.w-a.w);
+  const trap=trapCands.length?trapCands[0]:null;
+  d.edges.forEach(e=>{
+    const danger=e.s>=0.5*sMax;
+    const isTrap=trap&&e.a===trap.a&&e.b===trap.b;
+    const col=danger?'#E5484D':(isTrap?'#35D0BE':'#566'); const r=(danger||isTrap)?7:5;
+    g+=`<circle cx="${x(e.w)}" cy="${y(e.s)}" r="${r}" fill="${col}" fill-opacity="${danger||isTrap?0.95:0.5}" stroke="#0B0E14" stroke-width="1.5"/>`;
+  });
+  const dEdge=[...d.edges].sort((a,b)=>b.s-a.s)[0];
+  g+=`<text class="axlab" x="${x(dEdge.w)}" y="${y(dEdge.s)-12}" text-anchor="middle" fill="#ffb4b6">danger cluster</text>`;
+  if(trap) g+=`<text class="axlab" x="${x(trap.w)}" y="${y(trap.s)-10}" text-anchor="middle" fill="#35D0BE">heavy, harmless</text>`;
+  svg.innerHTML=g;
+  // scatter note
+  const note=document.getElementById('scatternote');
+  if(trap){
+    note.innerHTML=`<p>The dangerous edges sit <span class="danger">top-right</span>: both strong and driving instability.</p>
+      <p style="margin-top:12px">But <b>${trap.a}&ndash;${trap.b}</b> is a trap: a fairly <b>heavy</b> coupling (${trap.w.toFixed(2)}) that carries <span class="safe">almost no instability</span> (${trap.s.toFixed(2)}). Cutting it would waste effort. The reading sends you to the edges that actually matter.</p>`;
+  } else {
+    note.innerHTML=`<p>The <span class="danger">danger cluster</span> sits top-right. Here the biggest couplings are also the most dangerous, and the decoupled domain stays low on both axes.</p>
+      <p style="margin-top:12px">No single edge stands out as a hidden trap. The reading still locates the weak seam correctly: it just tells you the risk is shared across the cluster, not isolated to one coupling.</p>`;
+  }
+}
+
+function buildLines(d){
+  const svg=document.getElementById('lines'); const W=720,H=300,L=54,R=120,T=16,B=44;
+  const bud=d.sweep.budget, maxB=0.30, idxMax=bud.indexOf(maxB);
+  const ser={targeted:d.sweep.targeted,smart:d.sweep.smart,naive:d.sweep.naive,cutbig:d.sweep.cutbig};
+  let ymax=0;['targeted','smart','naive','cutbig'].forEach(k=>ymax=Math.max(ymax,ser[k][idxMax]));
+  ymax=Math.ceil(ymax*10)/10||0.1;
+  const x=b=>L+(b/maxB)*(W-L-R), y=v=>H-B-(v/ymax)*(H-T-B);
+  const path=a=>{let s='';for(let i=0;i<=idxMax;i++)s+=(i?'L':'M')+x(bud[i]).toFixed(1)+' '+y(a[i]).toFixed(1)+' ';return s;};
+  let base='';
+  for(let i=0;i<=6;i++){const gx=L+i*(W-L-R)/6; base+=`<line class="gridln" x1="${gx}" y1="${T}" x2="${gx}" y2="${H-B}"/>`;
+    base+=`<text class="axlab" x="${gx}" y="${H-B+16}" text-anchor="middle">${Math.round(maxB*i/6*100)}%</text>`;}
+  for(let i=0;i<=4;i++){const gy=T+i*(H-T-B)/4; base+=`<line class="gridln" x1="${L}" y1="${gy}" x2="${W-R}" y2="${gy}"/>`;
+    base+=`<text class="axlab" x="${L-8}" y="${gy+3}" text-anchor="end">${(ymax*(1-i/4)).toFixed(1)}</text>`;}
+  base+=`<text class="axlab" x="${(L+W-R)/2}" y="${H-4}" text-anchor="middle">repair budget &rarr;</text>`;
+  base+=`<text class="axlab" transform="translate(14 ${(T+H-B)/2}) rotate(-90)" text-anchor="middle">margin gain (&rho; reduced) &rarr;</text>`;
+  const lines=`<path d="${path(ser.cutbig)}" fill="none" stroke="#566" stroke-width="1.5" stroke-dasharray="3 3"/>`+
+    `<path d="${path(ser.naive)}" fill="none" stroke="#F2A93B" stroke-width="2"/>`+
+    `<path d="${path(ser.smart)}" fill="none" stroke="#7fb9b0" stroke-width="2"/>`+
+    `<path d="${path(ser.targeted)}" fill="none" stroke="#35D0BE" stroke-width="2.8"/>`;
+  svg.innerHTML=base+lines+`<g id="marker"></g>`;
+  return {x,y,bud,ser,T,B,H,ymax};
+}
+
+function updateFactors(){
+  const d=DATA[current]; const pct=+document.getElementById('budget').value; const b=pct/100;
+  document.getElementById('budgetval').textContent=pct+'%';
+  let idx=LC.bud.indexOf(b); if(idx<0) idx=Math.round(pct/2);
+  const tG=LC.ser.targeted[idx], nG=LC.ser.naive[idx], sG=LC.ser.smart[idx];
+  document.getElementById('f-gain').textContent=tG.toFixed(2);
+  document.getElementById('f-naive').textContent=nG>0.001?(tG/nG).toFixed(1)+'\u00d7':'\u2014';
+  document.getElementById('f-smart').textContent=sG>0.001?(tG/sG).toFixed(1)+'\u00d7':'\u2014';
+  const mx=LC.x(b);
+  let m=`<line x1="${mx}" y1="${LC.T}" x2="${mx}" y2="${LC.H-LC.B}" stroke="#E6EAF0" stroke-opacity="0.25" stroke-width="1"/>`;
+  m+=`<circle cx="${mx}" cy="${LC.y(tG)}" r="5" fill="#35D0BE" stroke="#0B0E14" stroke-width="2"/>`;
+  m+=`<circle cx="${mx}" cy="${LC.y(nG)}" r="4" fill="#F2A93B" stroke="#0B0E14" stroke-width="1.5"/>`;
+  document.getElementById('marker').innerHTML=m;
+}
+
+function setMachine(key){
+  current=key;
+  document.getElementById('b-hydraulic').setAttribute('aria-pressed', key==='hydraulic');
+  document.getElementById('b-engine').setAttribute('aria-pressed', key==='engine');
+  const d=DATA[key], m=META[key];
+  document.getElementById('mctx').innerHTML=m.ctx;
+  renderMatrix(d); renderReadout(d,m); renderScatter(d);
+  LC=buildLines(d);
+  document.getElementById('intervnote').innerHTML=m.interv;
+  updateFactors();
+}
+
+document.getElementById('budget').addEventListener('input',updateFactors);
+setMachine('hydraulic');
+</script>
+</body>
+</html>

@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Seam Diagnostics — where a multi-domain machine is weakest</title>
+<title>Seam Diagnostics: where a multi-domain machine is weakest</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
@@ -910,7 +910,7 @@ function renderMatrix(d){
   const t=document.getElementById('matrix'); const dn=d.domains.map(x=>x.slice(0,4)); const n=d.domains.length;
   let h='<tr><td></td>'; dn.forEach(x=>h+=`<td class="collab">${x}</td>`); h+='</tr>';
   d.matrix.forEach((row,i)=>{ h+=`<tr><td class="rowlab">${dn[i]}</td>`;
-    row.forEach((v,j)=>{ if(i===j){h+=`<td><div class="cell self" title="${d.domains[i]} — self">self</div></td>`;}
+    row.forEach((v,j)=>{ if(i===j){h+=`<td><div class="cell self" title="${d.domains[i]} · self">self</div></td>`;}
       else{const cls=v<0.05?'cell zero':'cell'; const tc=(v>0.05&&v<0.5)?'lo':'';
         h+=`<td><div class="${cls}" style="background:${ramp(v)}" title="${d.domains[i]} ↔ ${d.domains[j]}: ${v}"><span class="${tc}">${v.toFixed(2)}</span></div></td>`;}});
     h+='</tr>';});
